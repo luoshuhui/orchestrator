@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(go run:*)",
+      "Bash(sed 's/\\\\\\\\n\", event.Type, event.Source\\)\\\\\\\\n\\\\\\\\t\\\\\\\\t\\\\\\\\to.eventBus.Publish\\(event\\)/\\\\\\\\n\", event.Type, event.Source\\)\\\\n\\\\t\\\\t\\\\to.eventBus.Publish\\(event\\)/')",
+      "Bash(mv /tmp/orchestrator_fix.go /Users/luoshuhui/工程/orchestrator/pkg/engine/orchestrator.go)",
+      "Bash(git init *)",
+      "Bash(git commit *)",
+      "Bash(git branch *)"
+    ]
+  }
+}
