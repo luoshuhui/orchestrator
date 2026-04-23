@@ -7,7 +7,8 @@
       "Bash(mv /tmp/orchestrator_fix.go /Users/luoshuhui/工程/orchestrator/pkg/engine/orchestrator.go)",
       "Bash(git init *)",
       "Bash(git commit *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(git remote *)"
     ]
   }
 }

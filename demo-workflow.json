@@ -1,0 +1,62 @@
+{
+  "workflow_id": "final-orchestration-v1",
+  "resources": [
+    {
+      "id": "T_Img",
+      "type": "Tunnel",
+      "properties": { "source": "DC3", "target": "DC1/2" }
+    },
+    {
+      "id": "R_Img",
+      "type": "Replica",
+      "dependencies": ["T_Img"],
+      "properties": { "data": "Image-X", "dc": "DC1" }
+    },
+    {
+      "id": "T_Dat",
+      "type": "Tunnel",
+      "properties": { "source": "DC4", "target": "DC1/2" }
+    },
+    {
+      "id": "R_Dat",
+      "type": "Replica",
+      "dependencies": ["T_Dat"],
+      "properties": { "data": "Dataset-X", "dc": "DC1" }
+    },
+    {
+      "id": "App_X",
+      "type": "Application",
+      "dependencies": ["R_Img", "R_Dat"],
+      "properties": {
+        "name": "App-X",
+        "datacenters": ["DC1"]
+      }
+    },
+    {
+      "id": "T_Mod",
+      "type": "Tunnel",
+      "dependencies": ["App_X"],
+      "required_events": [
+        {
+          "name": "WaitAppFinish",
+          "event_type": "ExternalSignal",
+          "source": "App_X"
+        }
+      ],
+      "properties": { "source": "DC1", "target": "DC5" }
+    },
+    {
+      "id": "R_Mod",
+      "type": "Replica",
+      "dependencies": ["T_Mod"],
+      "required_events": [
+        {
+          "name": "ModelInfo",
+          "event_type": "ExternalSignal",
+          "source": "App_X"
+        }
+      ],
+      "properties": { "data": "Model-X", "dc": "DC5" }
+    }
+  ]
+}

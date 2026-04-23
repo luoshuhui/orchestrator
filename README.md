@@ -1,31 +1,49 @@
 # DAG-EDA 编排引擎
 
-本项目是一个结合了 **DAG (有向无环图)** 和 **EDA (事件驱动架构)** 的声明式资源编排引擎。它解决了传统 DAG 在处理异步信号、动态参数和资源生命周期清理时的不足。
+本项目是一个结合了 **DAG (有向无环图)** 和 **EDA (事件驱动架构)** 的声明式资源编排引擎。它采用“内核-驱动”分离架构，实现了编排逻辑与具体业务的高度解耦。
 
-## 核心理念：DAG + EDA
+## 1. 核心架构设计
 
-### 1. 节点与线 (Nodes & Edges)
+### 引擎与驱动分离 (Core & Providers)
+系统分为三个逻辑层级，确保了高扩展性和可维护性：
 
-*   **节点 (Node / Object)**：每个节点代表一个**资源对象 (api.Resource)**。它不仅仅是一个动作，而是一个维护自身期望状态（Expected State）的实体（如隧道、应用实例、数据副本）。
-*   **线 (Edges)**：
-    *   **实线 (DAG 拓扑依赖)**：定义了资源的启动顺序。只有父节点状态为 `Succeeded`，子节点才会被考虑启动。
-    *   **虚线 (EDA 事件触发)**：定义了动态触发信号。通过事件总线传递，用于开启节点的**事件门控 (Event Gate)** 或触发资源的自动清理。
+1.  **通用引擎层 (Core Engine)**：
+    *   **职责**：负责拓扑排序（DAG）、并发调度、事件分发（EDA）和状态管理。
+    *   **特点**：完全业务中立，不感知具体的资源类型（如 Tunnel 或 App）。
+2.  **资源驱动层 (Providers)**：
+    *   **职责**：实现具体的 `api.Resource` 接口。定义了资源的 `Provision`（创建）和 `Deprovision`（销毁）逻辑。
+    *   **特点**：作为插件存在，可以根据业务需求自由扩展。
+3.  **应用组装层 (Application/Demo)**：
+    *   **职责**：通过**注册机制**将驱动注入引擎，并加载 JSON 声明文件启动工作流。
 
 ---
 
-## 详细案例：跨数据中心部署与模型回收
+## 2. 目录结构说明
 
-### 业务场景
-1.  将应用 **App X** 部署到 **DC1** 和 **DC2**。
-2.  部署前需从 **DC3** 同步镜像，从 **DC4** 同步数据集。
-3.  同步需要建立临时隧道，同步完成后自动删除隧道。
-4.  App X 运行结束后，在 **DC1** 生成模型并回收至 **DC5**。
+| 目录 | 功能说明 | 内容 |
+| :--- | :--- | :--- |
+| `pkg/api` | **协议定义** | 定义资源接口、事件模型、工作流配置 JSON 结构。 |
+| `pkg/dag` | **拓扑引擎** | 维护资源间的静态依赖关系，生成执行层级。 |
+| `pkg/eventbus` | **事件总线** | 核心 EDA 基础设施，支持实时广播和历史事件补发。 |
+| `pkg/engine` | **编排核心** | 包含调度器（Orchestrator）、门控管理器（Gate）和资源工厂（Factory）。 |
+| `pkg/providers` | **资源插件** | 具体的资源实现（如 Tunnel, Replica, Application）。 |
+| `internal/demo` | **业务逻辑** | 演示场景的组装逻辑，包含资源注册和 Demo 运行函数。 |
+| `cmd/` | **入口程序** | 编译后的可执行文件入口。 |
 
-### DAG-EDA 逻辑图
+---
+
+## 3. 核心理念：DAG + EDA 结合
+
+*   **节点 (Object)**：每个节点是一个**资源对象**。它不仅是动作，而是维护自身期望状态的实体。
+*   **线 (Edges)**：
+    *   **实线 (DAG 拓扑线)**：定义**启动顺序**。父节点 `Succeeded` 后，子节点才可进入调度。
+    *   **虚线 (EDA 事件线)**：定义**动态触发**。通过事件总线开启节点的“事件门控 (Event Gate)”，处理异步信号或动态参数透传。
+
+### 案例流程图 (跨中心同步与模型回收)
 
 ```mermaid
 graph TD
-    %% 节点定义 (Objects)
+    %% 节点定义
     T_Img[Tunnel: Image]
     T_Dat[Tunnel: Dataset]
     R_Img[Replica: Image]
@@ -34,7 +52,7 @@ graph TD
     T_Mod[Tunnel: Model]
     R_Mod[Replica: Model]
 
-    %% DAG 拓扑依赖 (实线 - 决定启动顺序)
+    %% DAG 拓扑依赖 (实线)
     T_Img ===> R_Img
     T_Dat ===> R_Dat
     R_Img ===> App
@@ -42,20 +60,26 @@ graph TD
     App ===> T_Mod
     T_Mod ===> R_Mod
 
-    %% EDA 事件驱动 (虚线 - 决定动作触发与清理)
+    %% EDA 事件触发 (虚线)
     App -. "事件: TaskFinished -> 开启门控" .-> T_Mod
-    App -. "事件: ModelGenerated(path) -> 传递路径" .-> R_Mod
-    R_Img -. "事件: Success -> 触发销毁" .-> T_Img
-    R_Dat -. "事件: Success -> 触发销毁" .-> T_Dat
-    R_Mod -. "事件: Success -> 触发销毁" .-> T_Mod
+    App -. "事件: ModelPath(payload) -> 传递参数" .-> R_Mod
 ```
 
-### 关键机制说明
-1.  **动态启动 (Event Gate)**：`T_Mod` 虽在 DAG 上依赖 `App`，但它会保持 `Blocked` 状态，直到接收到应用内部发出的 `TaskFinished` 异步事件。
-2.  **用完即焚 (Reactive Cleanup)**：`R_Img` 拷贝成功后发布事件，触发上游 `T_Img` 的 `Deprovision`，实现自动清理。
-3.  **参数透传 (Payload Binding)**：App 运行生成的模型路径通过事件负载传递给 `R_Mod`，实现了运行时的动态参数绑定。
+---
 
-## 运行 Demo
+## 4. 运行 Demo
+
+### 模式 1：运行 JSON 驱动的声明式工作流 (推荐)
+```bash
+go run cmd/orchestrator/main.go demo-workflow.json
+```
+
+### 模式 2：运行硬编码的场景
 ```bash
 go run cmd/orchestrator/main.go
 ```
+
+## 5. 扩展新资源
+1.  在 `pkg/providers` 下实现 `api.Resource` 接口。
+2.  在启动时通过 `factory.Register("TypeName", CreatorFunc)` 注册。
+3.  在 JSON 中即可使用该类型。
